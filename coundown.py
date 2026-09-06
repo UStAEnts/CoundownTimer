@@ -28,7 +28,9 @@ class CountdownTimer:
         root.title(WINDOW_TITLE)
         root.geometry(WINDOW_SIZE)
         root.configure(bg=BACKGROUND)
-        root.attributes("-topmost", True)
+        # Behave like a normal application window. It does not need to stay
+        # above the production/control applications for OBS to capture it.
+        root.attributes("-topmost", False)
 
         self.label = tk.Label(
             root,
@@ -41,7 +43,31 @@ class CountdownTimer:
         self.label.pack(expand=True, fill="both")
 
         root.protocol("WM_DELETE_WINDOW", self.quit)
+
+        # On Windows, OBS normally cannot capture a genuinely minimised window
+        # because Windows stops rendering its contents. Treat the minimise
+        # button as "send to back" instead: restore the window immediately,
+        # then lower it behind other applications so OBS can keep capturing it.
+        root.bind("<Unmap>", self.on_unmap)
+
         root.after(50, self.update)
+
+
+    def on_unmap(self, event):
+        # <Unmap> is generated when the top-level window is minimised. Check the
+        # state after Windows has completed the minimise operation, then turn it
+        # back into a rendered window and put it at the back of the stack.
+        if event.widget is self.root:
+            self.root.after(50, self.restore_behind_if_minimised)
+
+    def restore_behind_if_minimised(self):
+        try:
+            if self.root.state() == "iconic":
+                self.root.deiconify()
+                self.root.lower()
+        except tk.TclError:
+            # The application may already be closing.
+            pass
 
     def set_duration(self, seconds):
         self.duration = float(seconds)
